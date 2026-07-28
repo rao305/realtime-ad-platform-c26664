@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adserver
+spec:
+  replicas: 6
+  selector:
+    matchLabels: { app: adserver }
+  template:
+    metadata:
+      labels: { app: adserver }
+    spec:
+      containers:
+        - name: adserver
+          image: registry/adserver:latest
+          ports: [{ containerPort: 8080 }]
+          readinessProbe:          # only receive traffic once cache is warm
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:           # restart if wedged
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "250m", memory: "128Mi" }
+            limits:   { cpu: "1",    memory: "256Mi" }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: adserver-hpa
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: adserver }
+  minReplicas: 6
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 60 } }
