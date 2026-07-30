@@ -1,0 +1,39 @@
+groups:
+  - name: adplatform-slos
+    rules:
+      - alert: HighDecisionLatency
+        expr: histogram_quantile(0.99, sum(rate(adserver_decision_latency_seconds_bucket[5m])) by (le)) > 0.030
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "Adserver p99 decision latency above 30ms SLO"
+
+      - alert: ServingErrorBudgetBurn
+        expr: |
+          (
+            sum(rate(adserver_decisions_total{outcome="cache_error"}[5m]))
+            /
+            clamp_min(sum(rate(adserver_decisions_total[5m])), 1e-9)
+          ) > 0.01
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Elevated cache_error outcomes burning availability budget"
+
+      - alert: FrequencyCapFailOpen
+        expr: increase(adserver_freq_fail_open_total[5m]) > 50
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Frequency capping failing open due to Redis errors"
+
+      - alert: EventEmitFailures
+        expr: increase(adserver_events_emitted_total{result="error"}[5m]) > 20
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Kafka emit failures on the adserver"

@@ -1,0 +1,170 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ads
+      POSTGRES_PASSWORD: ads
+      POSTGRES_DB: ads
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./platform/processor/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./platform/processor/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ads -d ads"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: redpandadata/redpanda:v24.2.4
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - 512M
+      - --reserve-memory
+      - 0M
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - INTERNAL://kafka:9092,EXTERNAL://localhost:19092
+    ports:
+      - "19092:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  kafka-init:
+    image: redpandadata/redpanda:v24.2.4
+    entrypoint: ["rpk"]
+    command:
+      - topic
+      - create
+      - ad-events
+      - ad-events-dlq
+      - --brokers
+      - kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  cache-sync:
+    build:
+      context: .
+      dockerfile: platform/processor/Dockerfile
+    command: ["python", "/app/cache_sync/sync.py"]
+    environment:
+      POSTGRES_DSN: postgres://ads:ads@postgres:5432/ads?sslmode=disable
+      REDIS_ADDR: redis:6379
+      CACHE_SYNC_INTERVAL_SEC: "2"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  adserver:
+    build:
+      context: .
+      dockerfile: platform/adserver/Dockerfile
+    ports:
+      - "18080:8080"
+    environment:
+      ADSERVER_ADDR: ":8080"
+      REDIS_ADDR: redis:6379
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: ad-events
+      DECISION_BUDGET_MS: "30"
+      FREQ_CAP_PER_HOUR: "5"
+      READY_REQUIRE_REDIS: "true"
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      cache-sync:
+        condition: service_started
+
+  spend-processor:
+    build:
+      context: .
+      dockerfile: platform/processor/Dockerfile
+    command: ["python", "consume.py"]
+    environment:
+      POSTGRES_DSN: postgres://ads:ads@postgres:5432/ads?sslmode=disable
+      REDIS_ADDR: redis:6379
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: ad-events
+      KAFKA_DLQ_TOPIC: ad-events-dlq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  analytics-sink:
+    build:
+      context: .
+      dockerfile: platform/processor/Dockerfile
+    command: ["python", "/app/analytics/local_sink.py"]
+    environment:
+      POSTGRES_DSN: postgres://ads:ads@postgres:5432/ads?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: ad-events
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./platform/ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./platform/ops/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - adserver
+      - spend-processor
+      - cache-sync
+      - analytics-sink
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./platform/ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./platform/ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:

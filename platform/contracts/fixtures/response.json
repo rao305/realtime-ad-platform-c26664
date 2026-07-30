@@ -1,0 +1,7 @@
+{
+  "request_id": "req-fixture-1",
+  "campaign_id": "camp-gadgets",
+  "creative_id": "cre-gadgets-1",
+  "served": true,
+  "decision_ms": 2
+}

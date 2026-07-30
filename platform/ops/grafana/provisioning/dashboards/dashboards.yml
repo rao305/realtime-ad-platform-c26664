@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: adplatform
+    orgId: 1
+    folder: Ad Platform
+    type: file
+    disableDeletion: false
+    options:
+      path: /var/lib/grafana/dashboards

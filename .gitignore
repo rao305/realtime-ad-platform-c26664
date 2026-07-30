@@ -1,0 +1,35 @@
+# Binaries
+bin/
+*.exe
+*.test
+/adserver
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg
+
+# Env / secrets
+.env
+*.pem
+credentials.json
+service-account*.json
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Coverage / build
+coverage.out
+coverage.xml
+htmlcov/
+dist/
+.docker/
