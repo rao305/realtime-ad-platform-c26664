@@ -2,7 +2,7 @@
 bin/
 *.exe
 *.test
-adserver
+/adserver
 
 # Python
 __pycache__/
