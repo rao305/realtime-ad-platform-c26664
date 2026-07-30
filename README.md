@@ -1,10 +1,21 @@
 # Real-Time Ad Delivery & Analytics Platform
 
-I built this project to understand what happens after an ad request reaches a
+So I built this project to understand what happens after an ad request reaches a
 real delivery system. The result is a working local platform: Go makes the hot
 path decision, Redis serves campaign state and frequency caps, Kafka carries
 events, Python updates budgets, PostgreSQL keeps transactional truth, and a
 second consumer writes analytics locally or to BigQuery.
+
+## What I learned
+
+- The low-latency read path and durable write path need different stores:
+  PostgreSQL is truth; Redis is a disposable serving view.
+- Kafka's at-least-once delivery is safe only when the event claim, campaign
+  lock, spend update, and ledger write happen in one transaction.
+- Failure policy is a product decision: targeting fails closed, frequency caps
+  fail open with telemetry, and Kafka never delays the HTTP response.
+- A deadline is not just a metric. At saturation the server returns no-ad rather
+  than allowing a slow decision to consume the caller's latency budget.
 
 ## Architecture
 
@@ -40,16 +51,7 @@ other local stacks on 8080):
 | http://localhost:9090 | Prometheus |
 | http://localhost:3000 | Grafana (anonymous viewer) |
 
-## What I learned
 
-- The low-latency read path and durable write path need different stores:
-  PostgreSQL is truth; Redis is a disposable serving view.
-- Kafka's at-least-once delivery is safe only when the event claim, campaign
-  lock, spend update, and ledger write happen in one transaction.
-- Failure policy is a product decision: targeting fails closed, frequency caps
-  fail open with telemetry, and Kafka never delays the HTTP response.
-- A deadline is not just a metric. At saturation the server returns no-ad rather
-  than allowing a slow decision to consume the caller's latency budget.
 
 ## Measured result
 
@@ -72,14 +74,6 @@ The integration checks also confirmed a `5/hour` cap served exactly 5 of 6
 requests, and replaying one impression created one claim and one `$0.0025`
 ledger charge.
 
-## Reproduce the checks
-
-```bash
-make test        # Go + Python unit tests
-make e2e         # request → Kafka → spend + analytics
-make invariants  # targeting + cap + duplicate charge
-make load        # N=1000, CONCURRENCY=50 by default
-```
 
 ## Notes
 
