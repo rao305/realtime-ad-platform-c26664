@@ -1,0 +1,41 @@
+{
+  "title": "Ad Platform Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Decision latency",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(adserver_decision_latency_seconds_bucket[1m])) by (le))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.99, sum(rate(adserver_decision_latency_seconds_bucket[1m])) by (le))", "legendFormat": "p99"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Decisions by outcome",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {"expr": "sum by (outcome) (rate(adserver_decisions_total[1m]))", "legendFormat": "{{outcome}}"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Events emitted",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {"expr": "sum by (type, result) (rate(adserver_events_emitted_total[1m]))", "legendFormat": "{{type}}/{{result}}"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Processor results",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "sum by (result) (rate(processor_events_total[1m]))", "legendFormat": "{{result}}"}
+      ]
+    }
+  ]
+}

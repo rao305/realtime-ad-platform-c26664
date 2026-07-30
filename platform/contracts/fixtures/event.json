@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "event_id": "evt-fixture-1",
+  "type": "impression",
+  "request_id": "req-fixture-1",
+  "campaign_id": "camp-gadgets",
+  "creative_id": "cre-gadgets-1",
+  "user_id": "user-42",
+  "bid_cpm": 2.5,
+  "at": "2026-07-30T04:00:00Z"
+}

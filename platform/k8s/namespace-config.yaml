@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: adplatform
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adplatform-config
+  namespace: adplatform
+data:
+  ADSERVER_ADDR: ":8080"
+  REDIS_ADDR: "redis.adplatform.svc.cluster.local:6379"
+  KAFKA_BROKERS: "kafka.adplatform.svc.cluster.local:9092"
+  KAFKA_TOPIC: "ad-events"
+  KAFKA_DLQ_TOPIC: "ad-events-dlq"
+  DECISION_BUDGET_MS: "30"
+  FREQ_CAP_PER_HOUR: "5"
+  READY_REQUIRE_REDIS: "true"
+  CACHE_SYNC_INTERVAL_SEC: "2"
+  ANALYTICS_SINK: "postgres"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: adplatform-secrets
+  namespace: adplatform
+type: Opaque
+stringData:
+  # Replace in real clusters; never commit production credentials.
+  POSTGRES_DSN: "postgres://ads:ads@postgres.adplatform.svc.cluster.local:5432/ads?sslmode=require"

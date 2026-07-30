@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - run: go test ./...
+      - run: go vet ./...
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r platform/processor/requirements.txt
+      - run: PYTHONPATH=platform/processor:platform/contracts/python pytest platform/processor/tests platform/contracts/python -q
+
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f platform/adserver/Dockerfile -t adserver:ci .
+      - run: docker build -f platform/processor/Dockerfile -t processor:ci .
+
+  k8s:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: Parse Kubernetes manifests
+        run: |
+          python3 - <<'PY'
+          import glob, yaml, sys
+          for path in sorted(glob.glob("platform/k8s/*.yaml")):
+              docs = list(yaml.safe_load_all(open(path)))
+              assert docs, path
+              print(f"ok {path} ({len(docs)} docs)")
+          PY

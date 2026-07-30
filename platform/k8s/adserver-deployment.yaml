@@ -2,37 +2,116 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: adserver
+  namespace: adplatform
+  labels:
+    app: adserver
 spec:
-  replicas: 6
+  replicas: 3
   selector:
-    matchLabels: { app: adserver }
+    matchLabels:
+      app: adserver
   template:
     metadata:
-      labels: { app: adserver }
+      labels:
+        app: adserver
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: adserver
-          image: registry/adserver:latest
-          ports: [{ containerPort: 8080 }]
-          readinessProbe:          # only receive traffic once cache is warm
-            httpGet: { path: /healthz, port: 8080 }
+          image: ghcr.io/rao305/realtime-ad-platform/adserver:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: adplatform-config
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
             initialDelaySeconds: 3
             periodSeconds: 5
-          livenessProbe:           # restart if wedged
-            httpGet: { path: /healthz, port: 8080 }
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
             periodSeconds: 10
           resources:
-            requests: { cpu: "250m", memory: "128Mi" }
-            limits:   { cpu: "1",    memory: "256Mi" }
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "1"
+              memory: "256Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adserver
+  namespace: adplatform
+spec:
+  selector:
+    app: adserver
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: adserver-hpa
+  namespace: adplatform
 spec:
-  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: adserver }
-  minReplicas: 6
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: adserver
+  minReplicas: 3
   maxReplicas: 50
   metrics:
     - type: Resource
-      resource: { name: cpu, target: { type: Utilization, averageUtilization: 60 } }
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: adserver-pdb
+  namespace: adplatform
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: adserver
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: adserver-netpol
+  namespace: adplatform
+spec:
+  podSelector:
+    matchLabels:
+      app: adserver
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - {} # Redis + Kafka; tighten in production to named peers

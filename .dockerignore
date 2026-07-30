@@ -1,0 +1,12 @@
+.git
+**/.DS_Store
+**/__pycache__
+**/*.pyc
+.venv
+venv
+.env
+*.md
+docs
+.github
+bin
+coverage.out

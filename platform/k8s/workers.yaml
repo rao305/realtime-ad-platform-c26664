@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spend-processor
+  namespace: adplatform
+  labels:
+    app: spend-processor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: spend-processor
+  template:
+    metadata:
+      labels:
+        app: spend-processor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9101"
+    spec:
+      containers:
+        - name: spend-processor
+          image: ghcr.io/rao305/realtime-ad-platform/processor:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "consume.py"]
+          envFrom:
+            - configMapRef:
+                name: adplatform-config
+            - secretRef:
+                name: adplatform-secrets
+          ports:
+            - name: metrics
+              containerPort: 9101
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache-sync
+  namespace: adplatform
+  labels:
+    app: cache-sync
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cache-sync
+  template:
+    metadata:
+      labels:
+        app: cache-sync
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9102"
+    spec:
+      containers:
+        - name: cache-sync
+          image: ghcr.io/rao305/realtime-ad-platform/processor:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/cache_sync/sync.py"]
+          envFrom:
+            - configMapRef:
+                name: adplatform-config
+            - secretRef:
+                name: adplatform-secrets
+          ports:
+            - name: metrics
+              containerPort: 9102
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-sink
+  namespace: adplatform
+  labels:
+    app: analytics-sink
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics-sink
+  template:
+    metadata:
+      labels:
+        app: analytics-sink
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9103"
+    spec:
+      containers:
+        - name: analytics-sink
+          image: ghcr.io/rao305/realtime-ad-platform/processor:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/analytics/local_sink.py"]
+          envFrom:
+            - configMapRef:
+                name: adplatform-config
+            - secretRef:
+                name: adplatform-secrets
+          ports:
+            - name: metrics
+              containerPort: 9103
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spend-processor
+  namespace: adplatform
+spec:
+  selector:
+    app: spend-processor
+  ports:
+    - name: metrics
+      port: 9101
+      targetPort: metrics
